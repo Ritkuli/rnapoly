@@ -1,0 +1,19 @@
+\contentsline {section}{\numberline {1}Sterna}{3}
+\contentsline {paragraph}{}{3}
+\contentsline {subsection}{\numberline {1.1}Basics}{3}
+\contentsline {subsubsection}{\numberline {1.1.1}Setup}{3}
+\contentsline {subsubsection}{\numberline {1.1.2}Use}{4}
+\contentsline {subsubsection}{\numberline {1.1.3}Input / Output}{6}
+\contentsline {subsection}{\numberline {1.2}Settings}{8}
+\contentsline {section}{\numberline {2}Snac fileformat}{10}
+\contentsline {subsection}{\numberline {2.1}Specification}{10}
+\contentsline {subsection}{\numberline {2.2}Example}{10}
+\contentsline {section}{\numberline {3}Snacseq}{11}
+\contentsline {subsection}{\numberline {3.1}Usage}{11}
+\contentsline {subsection}{\numberline {3.2}Example}{12}
+\contentsline {section}{\numberline {4}Pkgen}{13}
+\contentsline {subsection}{\numberline {4.1}Usage}{13}
+\contentsline {subsection}{\numberline {4.2}Example}{13}
+\contentsline {section}{\numberline {5}Snac2ox}{14}
+\contentsline {subsection}{\numberline {5.1}Usage}{14}
+\contentsline {subsection}{\numberline {5.2}Example}{14}

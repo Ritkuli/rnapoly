@@ -1,0 +1,37 @@
+\section{Snacseq}
+Snacseq is a commandline tool used to generate the primary structure of an RNA strand based on its secondary structure and various other constraints. It uses Pkgen to select pseudoknots, and it generates the primary structure with NUPACK. The input is a snac-file, and the output either modifies the input file or generates a new snac-file. Snacseq generates the input for NUPACK by completing a premade template file, which contains fields such as prevented sequences, temperature and sodium content. Snacseq also allows the user to define the maximum G-C-content, to enforce certain pseudoknots to be selected or to define the minimum energy between mismatching pseudoknots. Snacseq can also be used to generate only pseudoknots, if the user wishes to generate the rest of the sequence by other means.
+\subsection{Usage}
+\begin{verbatim}
+  usage: snacseq.py [-h] [-p PAIR_LIST] [-e ENFORCED_PAIRS]
+                    [-o OUTPUT] [-r] [-c] [-i] [-gc GC_CONTENT]
+                    [-t THRESHOLD] [-x] [-PPRIMARY_GENERATOR] snac
+\end{verbatim}
+\begin{itemize}
+  \item -h; show help message and exit
+  \item snac; The input file in snac format.
+  \item -p PAIR\_LIST; Select pseudoknots from this list.
+  \item -e ENFORCED\_PAIRS; Enforce the selection of these pseudoknots.
+  \item -o OUTPUT; The output file name. If not specified, output is input file + \_seq.
+  \item -r; Replace the input file with the output.
+  \item -c; Ignore conflicts with prevented sequences.
+  \item -i; Ignore the existing primary structure. Otherwise use it as a restriction in generation.
+  \item -gc GC\_CONTENT; The maximum gc content of a pseudoknot in percents.
+  \item -t THRESHOLD; The minimum threshold between mismatching pseudoknots. Default = 3.
+  \item -x; Don't run primary structure design. Only find pseudoknots.
+  \item -P PRIMARY\_GENERATOR; The executable for the primary structure generator
+\end{itemize}
+
+\subsection{Example}
+The simplest use-case is to generate the primary structure using default settings.
+\begin{verbatim}
+./snacseq.py cube.snac
+\end{verbatim}
+Generating only pseudoknots and replacing the input file:
+\begin{verbatim}
+./snacseq.py -xr cube.snac
+\end{verbatim}
+Generating pseudoknots from a file and enforcing some pseudoknots from another file:
+\begin{verbatim}
+./snacseq.py  -p resources/pairs/default.txt
+              -e resources/pairs/ibuki.txt cube.snac
+\end{verbatim}

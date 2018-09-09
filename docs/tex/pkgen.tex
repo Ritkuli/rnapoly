@@ -1,0 +1,22 @@
+\section{Pkgen}
+Pkgen is a tool used to generate and select pseudoknots. When used as a commandline program, it generates all possible combinations of two strands of length N and calculates the nearest-neighbor-energy of them using NUPACK. It takes N as an input and outputs a sorted list of the strands and their energies. Pkgen also implements an API of Python functions that can be called directly from another Python script to select pseudoknot strands from a list based on restrictions such as G-C content, prevented sequences or the energy between mismatching strands.
+\subsection{Usage}
+\begin{verbatim}
+  usage: pkgen.py [-h] [-l LENGTH] [-c COUNT] output
+\end{verbatim}
+\begin{itemize}
+  \item -h; show help message and exit
+  \item output; The output path
+  \item -l LENGTH; Pseudoknot length
+  \item -c COUNT; Number of pseudoknots to generate
+\end{itemize}
+
+\subsection{Example}
+Generating all length 5-pseudoknots:
+\begin{verbatim}
+./pkgen.py -l 5 5pk.txt
+\end{verbatim}
+Generating 5000 random length 7 pseudoknots:
+\begin{verbatim}
+./pkgen.py -l 7 -c 5000
+\end{verbatim}

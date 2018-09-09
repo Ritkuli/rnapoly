@@ -1,0 +1,27 @@
+\section{Snac fileformat}
+Snac is a fileformat for nucleic acids based on the YAML markup language. It stands for simple nucleic acid conformation.
+\subsection{Specification}
+A snac file consists of keys and values separated by colons. Values can either be strings or comma-separated lists. All key and value pairs are single-lined, unless the value is enclosed within angle-brackets. Comments start with a hashtag and they mark the rest of the line as a comment.
+
+\subsection{Example}
+\begin{verbatim}
+  # The coordinates are represented as comma-separated three-
+  positions: [2.5304946899414062 -3.349562168121338 -5.601208
+  -3.130314588546753 -4.694784164428711, 1.9479056596755981 -
+  -4.089140892028809, 2.2102911472320557 -1.6827961206436157
+  2.164266347885132 -0.9340331554412842 -4.964865684509277, 1
+  -0.9045512676239014 -5.748674392700195, 0.8564323782920837
+  -5.600904941558838, -0.037134621292352676 -1.14846348762512
+  -0.23751431703567505 -0.5540553331375122 -4.285967350006103
+  ...
+  ...
+  ]
+  # domains separated by |:
+  # .................... | (((((((((((((((((((((((((((((((((
+  secondary_structure: ....................((((((((((((((((((
+  # the following numbers are assigned to pseudoknot complexe
+  pseudoknot_numbering: 0 0
+  # Nucleic acid notation  '|':
+  # GACUAAUACGACUCACUAUA | GGGKNNNNNKNNNNNKNNNNNKNNNNNKNNNNN
+  primary_structure: GACUAAUACGACUCACUAUAGGGKNNNNNKNNNNNKNNNN
+\end{verbatim}

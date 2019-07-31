@@ -2,23 +2,11 @@ import bpy, mathutils, sys
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
-try:
-    import sternaMain
-except ImportError:
-    pass
-
-
-def init():
-    global sternaMain
-    try:
-        sternaMain
-    except:
-        sternaMain = sys.modules[modulesNames['sternaMain']]
+from . import sternaMain
 
 def register():
     bpy.utils.register_class(SternaImport)
     bpy.types.INFO_MT_file_import.append(menu_sterna_import)
-    init()
 
 def unregister():
     bpy.utils.unregister_class(SternaImport)
@@ -58,10 +46,10 @@ def read_snac(snac):
     """ Reads a snac file.
 
     Args:
-        snac -- The path to the SNAC file
+        snac -- str, the path to the SNAC file
 
     Returns:
-        dictionary -- str => str, a map of parameters to their values
+        dict<str, str> -- a map of parameters to their values
     """
     if snac.endswith(".snac"):
         path = snac

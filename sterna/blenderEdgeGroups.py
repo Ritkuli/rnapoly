@@ -1,23 +1,4 @@
-bl_info = {
-    'name': 'Edge Groups',
-    'author': 'Antti Elonen',
-    'version': (0,0,1),
-    'blender': (2, 79, 0),
-    'location': 'Object data',
-    'description': 'Edge groups',
-    'wiki_url': '',
-    'tracker_url': '',
-    'category': 'Object'
-}
-
 import bpy, bmesh
-
-def init():
-    global dic
-    dic = {}
-    bpy.types.Object.edge_groups = bpy.props.CollectionProperty(type=EdgeGroup)
-    bpy.types.Object.active_edge_group_index = bpy.props.IntProperty(name="Active Edge Group Index")
-    bpy.app.handlers.scene_update_post.append(edit_object_change_handler)
 
 dic = {}
 
@@ -34,7 +15,14 @@ class EdgeGroupPanel(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return (obj and obj.type in {'MESH', 'LATTICE'})
+        # add one instance of edit bmesh to global dic
+        if obj.mode == 'EDIT' and obj.type == 'MESH':
+            bm = dic.setdefault(obj.name, bmesh.from_edit_mesh(obj.data))
+            if bm.edges.layers.int.get("edge_groups") is None:
+                edge_groups_layer = bm.edges.layers.int.new("edge_groups")
+
+        dic.clear()
+        return True
 
 
     def draw(self, context):
@@ -67,6 +55,7 @@ class EdgeGroupPanel(bpy.types.Panel):
             sub.operator("object.edge_group_deselect", text="Deselect")
 
 
+
 class EdgeGroupAdd(bpy.types.Operator):
     """Add an edge group to an object
     """
@@ -79,6 +68,17 @@ class EdgeGroupAdd(bpy.types.Operator):
     def execute(self, context):
         t = bpy.context.object.edge_groups.add()
         t.name = "new_edge_group"
+        new_id = 0
+        while True:
+            new_id += 1
+            is_unique = True
+            for eg in bpy.context.object.edge_groups:
+                if eg.id == new_id:
+                    is_unique = False
+                    break
+            if is_unique:
+                t.id = new_id
+                break
         return {'FINISHED'}
 
 class EdgeGroupDelete(bpy.types.Operator):
@@ -88,10 +88,38 @@ class EdgeGroupDelete(bpy.types.Operator):
     bl_label = "delete"
     @classmethod
     def poll(cls, context):
+        obj = context.object
+        # add one instance of edit bmesh to global dic
+        if obj.mode == 'EDIT' and obj.type == 'MESH':
+            bm = dic.setdefault(obj.name, bmesh.from_edit_mesh(obj.data))
+            if bm.edges.layers.int.get("edge_groups") is None:
+                edge_groups_layer = bm.edges.layers.string.new("edge_groups")
+
+        dic.clear()
         return True
     def execute(self, context):
+        prev_mode = context.active_object.mode
+        bpy.ops.object.mode_set(mode='EDIT')
+
+        eo = context.edit_object
+        eg_index = eo.edge_groups[eo.active_edge_group_index].id
+        bm = dic.setdefault(eo.name, bmesh.from_edit_mesh(eo.data))
+        egl = bm.edges.layers.string.get("edge_groups")
+        if egl:
+            for edge in bm.edges:
+                eg_raw = edge[egl]
+                if not eg_raw:
+                    eg_data = {}
+                else:
+                    eg_data = eval(eg_raw)
+                eg_data[eg_index] = 0
+                edge[egl] = bytes(str(eg_data), "utf-8")
+        bpy.ops.object.mode_set(mode=prev_mode)
+
         obj = context.object
         obj.edge_groups.remove(obj.active_edge_group_index)
+        if obj.active_edge_group_index > 0:
+            obj.active_edge_group_index -= 1
         return {'FINISHED'}
 
 class EdgeGroupMove(bpy.types.Operator):
@@ -105,7 +133,19 @@ class EdgeGroupMove(bpy.types.Operator):
         return True
 
     def execute(self, context):
-        pass #TODO
+        obj = context.object
+        eg = obj.edge_groups
+        i = obj.active_edge_group_index
+        if self.direction == "UP":
+            eg.move(i, i - 1)
+            obj.active_edge_group_index = i - 1
+        else:
+            eg.move(i, i + 1)
+            obj.active_edge_group_index = i + 1
+        if obj.active_edge_group_index >= len(eg):
+            obj.active_edge_group_index = len(eg) -1
+        elif obj.active_edge_group_index < 0:
+            obj.active_edge_group_index = 0
         return {'FINISHED'}
 
 
@@ -120,11 +160,12 @@ class EdgeGroupSelect(bpy.types.Operator):
         return (obj and obj.type in {'MESH', 'LATTICE'})
     def execute(self, context):
         eo = context.edit_object
+        eg_index = eo.edge_groups[eo.active_edge_group_index].id
         bm = dic.setdefault(eo.name, bmesh.from_edit_mesh(eo.data))
-        egl = bm.edges.layers.int.get("edge_groups")
+        egl = bm.edges.layers.string.get("edge_groups")
         edges = []
         for e in bm.edges:
-            if e[egl] is 1:
+            if is_in_edge_group(e[egl], eg_index):
                 e.select = 1
         bpy.context.scene.objects.active = bpy.context.scene.objects.active
         return {'FINISHED'}
@@ -140,11 +181,12 @@ class EdgeGroupDeselect(bpy.types.Operator):
         return (obj and obj.type in {'MESH', 'LATTICE'})
     def execute(self, context):
         eo = context.edit_object
+        eg_index = eo.edge_groups[eo.active_edge_group_index].id
         bm = dic.setdefault(eo.name, bmesh.from_edit_mesh(eo.data))
-        egl = bm.edges.layers.int.get("edge_groups")
+        egl = bm.edges.layers.string.get("edge_groups")
         edges = []
         for e in bm.edges:
-            if e[egl] is 1:
+            if is_in_edge_group(e[egl], eg_index):
                 e.select = 0
         bpy.context.scene.objects.active = bpy.context.scene.objects.active
         return {'FINISHED'}
@@ -159,16 +201,23 @@ class EdgeGroupAssign(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.object
+        bm = dic.setdefault(obj.name, bmesh.from_edit_mesh(obj.data))
         return (obj and obj.type in {'MESH', 'LATTICE'})
 
     def execute(self, context):
         eo = context.edit_object
+        eg_index = eo.edge_groups[eo.active_edge_group_index].id
         bm = dic.setdefault(eo.name, bmesh.from_edit_mesh(eo.data))
-        egl = bm.edges.layers.int.get("edge_groups")
-        edges = []
-        for e in bm.edges:
-            if e.select:
-                e[egl] = 1
+        egl = bm.edges.layers.string.get("edge_groups")
+        for edge in bm.edges:
+            if edge.select:
+                eg_raw = edge[egl]
+                if not eg_raw:
+                    eg_data = {}
+                else:
+                    eg_data = eval(eg_raw)
+                eg_data[eg_index] = 1
+                edge[egl] = bytes(str(eg_data), "utf-8")
 
         # trigger viewport update
         bpy.context.scene.objects.active = bpy.context.scene.objects.active
@@ -185,32 +234,50 @@ class EdgeGroupRemove(bpy.types.Operator):
         return (obj and obj.type in {'MESH', 'LATTICE'})
     def execute(self, context):
         eo = context.edit_object
+        eg_index = eo.edge_groups[eo.active_edge_group_index].id
         bm = dic.setdefault(eo.name, bmesh.from_edit_mesh(eo.data))
-        egl = bm.edges.layers.int.get("edge_groups")
-        edges = []
-        for e in bm.edges:
-            if e.select:
-                e[egl] = 0
+        egl = bm.edges.layers.string.get("edge_groups")
+        for edge in bm.edges:
+            if edge.select:
+                eg_raw = edge[egl]
+                if not eg_raw:
+                    eg_data = {}
+                else:
+                    eg_data = eval(eg_raw)
+                eg_data[eg_index] = 0
+                edge[egl] = bytes(str(eg_data), "utf-8")
         return {'FINISHED'}
 
 class EdgeGroup(bpy.types.PropertyGroup):
     name = bpy.props.StringProperty(name="Group Name", default="Unknown")
+    id = bpy.props.IntProperty(name="Group ID")
+
 
 class ActiveEdgeGroupIndex(bpy.types.PropertyGroup):
     name = bpy.props.StringProperty(name="Group Name", default="Unknown")
 
+def is_in_edge_group(eg_raw, eg_id):
+    """ Returns whether an edge is marked as belonging to the edge group
+
+    Args:
+        eg_raw -- str, serialized dict<str, str>
+        eg_id -- int, id of the edge group
+
+    Returns:
+        bool
+    """
+    if not eg_raw:
+        eg_data = {}
+    else:
+        eg_data = eval(eg_raw)
+    return bool(eg_data.get(eg_id))
+
+
 def edit_object_change_handler(scene):
     obj = scene.objects.active
-    if obj is None:
-        return None
     # add one instance of edit bmesh to global dic
-    if obj.mode == 'EDIT' and obj.type == 'MESH':
-        bm = dic.setdefault(obj.name, bmesh.from_edit_mesh(obj.data))
-        if bm.edges.layers.int.get("edge_groups") is None:
-            edge_groups_layer = bm.edges.layers.int.new("edge_groups")
-        return None
-
-    dic.clear()
+    if obj != None and obj.mode == 'EDIT' and obj.type == 'MESH':
+        pass
     return None
 
 def register():
@@ -222,8 +289,11 @@ def register():
     bpy.utils.register_class(EdgeGroupRemove)
     bpy.utils.register_class(EdgeGroupSelect)
     bpy.utils.register_class(EdgeGroupDeselect)
-    bpy.utils.register_class(EdgeGroupPanel)
-    init()
+    #bpy.utils.register_class(EdgeGroupPanel)
+
+    bpy.types.Object.edge_groups = bpy.props.CollectionProperty(type=EdgeGroup)
+    bpy.types.Object.active_edge_group_index = bpy.props.IntProperty(name="Active Edge Group Index")
+    bpy.app.handlers.scene_update_post.append(edit_object_change_handler)
 
 
 def unregister():
@@ -235,7 +305,7 @@ def unregister():
     bpy.utils.unregister_class(EdgeGroupRemove)
     bpy.utils.unregister_class(EdgeGroupSelect)
     bpy.utils.unregister_class(EdgeGroupDeselect)
-    bpy.utils.unregister_class(EdgeGroupPanel)
+    #bpy.utils.unregister_class(EdgeGroupPanel)
 
 
 if __name__ == "__main__":

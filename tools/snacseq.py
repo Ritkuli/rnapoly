@@ -7,13 +7,16 @@ Author: Antti Elonen
 
 from lib.utils import read_snac, write_snac
 from tempfile import NamedTemporaryFile
-from shutil import copyfile
-import argparse, sys, subprocess, itertools, re, pkgen
+from shutil import copyfile, SameFileError, which
+import argparse, sys, subprocess, itertools, re, pkgen, os
+
+script_path = os.path.dirname(sys.argv[0])
 
 OUTPUT_PAT = "output/"
-PRIMARY_GENERATOR = "lib/nupack/multitubedesign"
-PAIR_LIST = "resources/pairs/default.txt"
-NP_TEMPLATE = "resources/templates/default.np"
+PRIMARY_GENERATOR = which("multitubedesign")
+if not PRIMARY_GENERATOR: PRIMARY_GENERATOR = script_path + "/lib/nupack/multitubedesign"
+PAIR_LIST = script_path + "/resources/pairs/default.txt"
+NP_TEMPLATE = script_path + "/resources/templates/default.np"
 
 def main(argv):
     args = interpret_arguments(argv)
@@ -62,7 +65,9 @@ def main(argv):
         output = snac_path
     else:
         output = args.snac.replace(".snac", "") + "_seq.snac"
-    copyfile(snac_path, output)
+    try:
+        copyfile(snac_path, output)
+    except SameFileError: pass
     s = write_snac(output, d)
     print("Saved output to {}".format(s))
     return
@@ -103,8 +108,10 @@ def interpret_arguments(argv):
 def read_enforced_pairs(path):
     """ Reads a file containing kissing loop pairs into an array.
 
+    Args:
+        path -- str
     Returns:
-        array
+        list<i, j>
     """
     pairs = []
     if path != None:
@@ -119,10 +126,9 @@ def generate_primary(np, primary_generator):
     """Generates a primary structure sans pseudoknots with the given generator
 
     Args:
-        np -- nupack input
-        primary_generator -- The command to run the primary-
+        np -- str: nupack input
+        primary_generator -- str: The command to run the primary-
             generating software in commandline.
-
     Returns:
         str -- The primary structure if successful, None If unsuccessful
     """
@@ -148,9 +154,8 @@ def create_domain(structure, pseudoknots):
     UG + CG pairs around pseudo-knots, and adds AA + A padding.
 
     Args:
-        structure -- The dotbracket secondary structure
-        pseudoknots -- A list of sequences of the pseudoknots
-
+        structure -- str: The dotbracket secondary structure
+        pseudoknots -- list<str>: A list of sequences of the pseudoknots
     Returns:
         str -- A domain following the np-script notation
     """
@@ -166,8 +171,7 @@ def read_primary(file):
     """Reads the primary structure from NUPACK output
 
     Args:
-        file -- The path to the NUPACK output file
-
+        file -- str: The path to the NUPACK output file
     Returns:
         str -- The primary structure
     """
@@ -184,14 +188,14 @@ def generate_np(secondary_structure, pseudoknots, GC_content = 1.0, ignore_confl
     """Generates the contents of a temporary np file for NUPACK
 
     args:
-        secondary_structure -- The dotbracket secondary structure sans anglebrackets
-        pseudoknots
+        secondary_structure --str: The dotbracket secondary structure sans anglebrackets
+        pseudoknots -- list<str>: list of the pseudoknot sequences
 
     KWargs:
-        GC_content -- the maximum proportion of G's and C's in the primary structure
-        ignore_conflicts -- ignore the conflicts between restrictions and given pseudoknots
-        ignore_primary -- ignore the given primary structure as a restriction
-        restriction -- a list of restrictions for the generator
+        GC_content -- float: the maximum proportion of G's and C's in the primary structure
+        ignore_conflicts -- bool: ignore the conflicts between restrictions and given pseudoknots
+        ignore_primary -- bool: ignore the given primary structure as a restriction
+        restriction -- str: a list of restrictions for the generator
 
     returns:
         str -- np contents
@@ -231,8 +235,11 @@ def generate_np(secondary_structure, pseudoknots, GC_content = 1.0, ignore_confl
 def split_to_domains(primary_structure, secondary_structure):
     """ Splits the primary structure into domains.
 
+    Args:
+        primary_structure -- str: IUPAC primary structure
+        secondary_structure -- str: dotbracket notation of the secondary structure
     Returns:
-    str
+        list<str>
     """
     pairs = {}
     stack = []

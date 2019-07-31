@@ -11,21 +11,44 @@ Author: Antti Elonen
 """
 from tempfile import NamedTemporaryFile
 from lib.utils import read_snac, remove_file
-from shutil import copyfile
-import re, os, argparse, sys, math, subprocess, math
+from shutil import copyfile, which
+import re, os, argparse, sys, math, subprocess, math, tempfile, numpy as np
 
-OXDNA_EXE = "./lib/oxdna/oxDNA"
-RELAXATION_INPUT = "resources/templates/relaxation_input"
-GENERIC_INPUT = "resources/templates/generic_input"
-BASE_STEPS = 1500
+script_path = os.path.abspath(os.path.dirname(sys.argv[0]))
+work_path = os.getcwd()
+
+OXDNA_EXE = which("oxDNA")
+if not OXDNA_EXE: OXDNA_EXE = script_path + "/lib/oxdna/oxDNA"
+RELAXATION_INPUT = script_path + "/resources/templates/relaxation_input"
+BURN_IN_INPUT = script_path + "/resources/templates/burn_in_input"
+GENERIC_CPU_INPUT = script_path + "/resources/templates/generic_input"
+GENERIC_GPU_INPUT = script_path + "/resources/templates/oxrna_cuda_input"
+SEQ_DEP_FILE = script_path + "/lib/parameters/rna_sequence_dependent_parameters.txt"
+BASE_STEPS = 1000
 TRAP = {
     "type": "mutual_trap",
     "particle": "n",
     "ref_particle": "n",
-    "stiff": "100",
+    "stiff": "15",
     "r0": "1.2"
 }
-verbose = True
+verbose = False
+
+
+"""
+pairs: (1, 3); (2, 4)
+5' -> 3':1 -> 2 -> 4 -> 3
+"""
+magic_value = 1.15
+# Backbone coordinates of the reference RNA helix:
+reference_helix_bb = np.matrix(([[0.34790706782241565, 1.425120976291932, 1.9743945943644676, 1], [-0.10455815001983909, 0.9425201267314649, 2.3030945943644676, 1], [-0.22459207165999268, 0.2919663541582757, 2.6317945943644676, 1], [0.025853467663527308, -0.32032882399232404, 2.9604945943644676, 1]])).transpose()
+# Inverse of the above:
+reference_helix_bb_inv = np.linalg.inv(reference_helix_bb)
+# OXDNA input parameters of the reference helix:
+reference_helix_input_1 = np.matrix(([[0.6983741093562843, 1.264664636888758, 2.0812899447957705, 1.0], [0.8761676038346716, -0.4011408485079351, 0.2672383760782569, 1.0], [-0.24298278125345144, 0.11124620291623981, 0.963630453208623, 1.0]])).transpose()
+reference_helix_input_2 = np.matrix(([[0.27704862836922695, 0.9968308139273313, 2.4099899447957704, 1.0], [0.9540169459726651, 0.13577671798966606, 0.26723837607825685, 1.0], [-0.2645723145672288, -0.0376542164104254, 0.963630453208623, 1.0]])).transpose()
+reference_helix_input_3 = np.matrix(([[0.0671933237617629, 0.5438287512618107, 2.7386899447957704, 1.0], [0.7294634885543889, 0.6296559927588375, 0.2672383760782569, 1.0], [-0.20229812937164504, -0.17461906110638953, 0.963630453208623, 1.0]])).transpose()
+reference_helix_input_4 = np.matrix(([[0.13532780179762505, 0.04925033427023945, 3.0673899447957704, 1.0], [0.2736858353352443, 0.9239478956564087, 0.2672383760782569, 1.0], [-0.07589979949998266, -0.2562334288979607, 0.963630453208623, 1.0]])).transpose()
 
 
 def main(argv):
@@ -37,40 +60,76 @@ def main(argv):
     secondary_structure = d["secondary_structure"]
     pseudoknot_numbering = d["pseudoknot_numbering"]
 
-    bases = get_bases(positions, secondary_structure, pseudoknot_numbering)
-    top = generate_top(primary_structure, args.output)
-    conf = generate_conf(bases, args.output)
+    five_to_three = False
+
+    bases = get_bases(positions, primary_structure, secondary_structure, pseudoknot_numbering, five_to_three)
+
+    top = os.path.join(work_path, generate_top(bases, args.output))
+    conf = os.path.join(work_path, generate_conf(bases, args.output))
     generated_files = [top, conf]
 
-    input_parameters = read_template(GENERIC_INPUT)
+    input_parameters = {}
     input_parameters["topology"] = top
     input_parameters["conf_file"] = conf
+    input_parameters["seq_dep_file"] = SEQ_DEP_FILE
 
-    if not args.no_relax:
-        if args.no_traps:
-            external = None
-        else:
-            external = generate_external(secondary_structure, pseudoknot_numbering, only_pseudoknots = args.only_pseudoknots)
-        relaxed_conf = relax_structure(conf, top, external = external)
-        if args.replace:
-            copyfile(relaxed_conf, conf)
-        else:
-            rx = conf + ".relaxed"
-            copyfile(relaxed_conf, rx)
-            generated_files.append(rx)
-            input_parameters["conf_file"] = rx
+    burn_in = None
+    external = None
+    relaxed_conf = None
+
+    with tempfile.TemporaryDirectory() as temp_dir_path:
+        os.chdir(temp_dir_path)
+        if not args.no_traps:
+            external = generate_external(bases, only_pseudoknots = args.only_pseudoknots)
+
+        if not args.no_relax:
+            relaxed_conf = relax_structure(conf, top, external = external)
+            if args.replace:
+                copyfile(relaxed_conf, conf)
+            else:
+                rx = conf + ".relaxed"
+                copyfile(relaxed_conf, rx)
+                generated_files.append(rx)
+                input_parameters["conf_file"] = rx
+
+        if not args.no_burn_in:
+            burn_in = burn_in_structure(input_parameters["conf_file"], top, external = external)
+            if args.replace:
+                copyfile(burn_in, conf)
+            else:
+                bi = conf + ".burnin"
+                copyfile(burn_in, bi)
+                generated_files.append(bi)
+                input_parameters["conf_file"] = bi
+
         if not args.no_clean:
             remove_file(relaxed_conf)
             remove_file(external)
+            remove_file(burn_in)
 
-    if args.generate_input:
-        input_file = args.output + ".input"
-        with open(input_file, "w") as f:
-            content = "\n".join([p + "=" + str(input_parameters[p]) for p in input_parameters])
-            f.write(content)
+        if not args.absolute_paths:
+            input_parameters["conf_file"] = os.path.relpath(input_parameters["conf_file"], work_path)
+            input_parameters["topology"] = os.path.relpath(input_parameters["topology"], work_path)
+            input_parameters["seq_dep_file"] = os.path.relpath(input_parameters["seq_dep_file"], work_path)
+        os.chdir(work_path)
+
+    if args.generate_cpu_input:
+        input_parameters = {**read_template(GENERIC_CPU_INPUT), **input_parameters}
+        input_file = generate_input(input_parameters, args.output + "_cpu")
         generated_files.append(input_file)
+
+    if args.generate_gpu_input:
+        input_parameters = {**read_template(GENERIC_GPU_INPUT), **input_parameters}
+        input_file = generate_input(input_parameters, args.output + "_gpu")
+        generated_files.append(input_file)
+
+
     print("**************************")
-    print("Generated files: {}".format(", ".join(generated_files)))
+    print("Generated files: ")
+    # Make output human readable
+    for f in generated_files:
+        f = os.path.relpath(f, work_path)
+        print(f)
 
 
 def interpret_arguments(argv):
@@ -91,6 +150,8 @@ def interpret_arguments(argv):
                     help="The output file name.")
     g.add_argument("-x", "--no_relax", action = "store_true",
                     help="Do not run the relaxation procedure.")
+    g.add_argument("-b", "--no_burn_in", action = "store_true",
+                    help="Do not run the burn-in simulation.")
     g.add_argument("-r", "--replace", action = "store_true",
                     help="Replace the initial configuration with the relaxed one.")
     g.add_argument("-c", "--no_clean", action = "store_true",
@@ -99,8 +160,12 @@ def interpret_arguments(argv):
                     help="Do not add traps to the relaxation procedure.")
     g.add_argument("-p", "--only_pseudoknots", action = "store_true",
                     help="Add traps only to the pseudoknots.")
-    g.add_argument("-g", "--generate_input", action = "store_true",
-                    help="Also generate an input file.")
+    g.add_argument("-g", "--generate_cpu_input", action = "store_true",
+                    help="Also generate an input file for CPU simulations.")
+    g.add_argument("-G", "--generate_gpu_input", action = "store_true",
+                    help="Also generate an input file for GPU simulations.")
+    g.add_argument("-a", "--absolute_paths", action = "store_true",
+                    help="Use absolute instead paths of relative for the input-file.")
 
     args = parser.parse_args(argv[1:])
     if not args.output:
@@ -111,19 +176,19 @@ def relax_structure(conf, top, external = None, relaxation_input = RELAXATION_IN
     """ Tries to relax the structure with OXDNA. Generates a new configuration file.
 
     Args:
-        conf -- configuration file
-        top -- topology file
+        conf -- str: configuration file
+        top -- str: topology file
 
     KWargs:
-        external -- an external forces file
-        relaxation_input -- input parameters template
+        external -- str: an external forces file
+        relaxation_input -- str: input parameters template
 
     Returns:
         str -- path to the generated conf
     """
-    min_dt = 0.000000003
+    min_dt = 0.00000003
     max_dt = 0.003
-    dt_multiplier = 5
+    dt_multiplier = 10
     input_parameters = read_template(relaxation_input)
 
     last_conf_name = input_parameters["lastconf_file"]
@@ -134,7 +199,7 @@ def relax_structure(conf, top, external = None, relaxation_input = RELAXATION_IN
     input_parameters["steps"] = int(input_parameters["steps"])
     if external != None: input_parameters["external_forces"] = 1
     print("Starting relaxation procedure.")
-    for relax_strength in [10, 100]:
+    for relax_strength in [1, 10, 100]:
         i = 0
         input_parameters["relax_strength"] = relax_strength
         print("-- Starting a cycle with relax strength {}".format(relax_strength))
@@ -157,61 +222,80 @@ def relax_structure(conf, top, external = None, relaxation_input = RELAXATION_IN
                 i = 0
     return last_conf_name
 
-def generate_external(secondary_structure, pseudoknot_numbering, only_pseudoknots = False, five_to_three = False):
+def burn_in_structure(conf, top, external = None, burn_in_input = BURN_IN_INPUT):
+    """ Burns in the RNA strand by forcing basepairs
+
+    Args:
+        conf -- str: path to the configuration file
+        top -- str: path to the topology file
+    Kwargs:
+        external -- str: path ot the external forces file
+        burn_in_input -- str: path to the burn-in-input parameters file
+    Returns:
+        str -- path to the created file
+    """
+    input_parameters = read_template(burn_in_input)
+    last_conf_name = input_parameters["lastconf_file"]
+    copyfile(conf, last_conf_name)
+    input_parameters["external_forces_file"] = external
+    input_parameters["topology"] = top
+    input_parameters["conf_file"] = last_conf_name
+    input_parameters["steps"] = int(input_parameters["steps"])
+    if external != None: input_parameters["external_forces"] = 1
+    print("Starting burn-in procedure.")
+    if run_relaxation(input_parameters) != 0:
+        print("Error! Try relaxing the structure.")
+    return last_conf_name
+
+def generate_external(bases, only_pseudoknots = False):
     """Generates an external forces file for OXDNA.
 
     Args:
-        secondary_structure
-        pseudoknot_numbering
-
+        bases -- list<Base>
     KWArgs:
-        only_pseudoknots -- Create external forces only for pseudoknots
-        five_to_three -- read from five prime to three prime
-
+        only_pseudoknots -- bool, create external forces only for pseudoknots
     Returns:
         str -- path to the generated file
     """
     path = ".external.conf.temp"
-    if five_to_three:
-        ss = secondary_structure
-        pn = pseudoknot_numbering.split(" ")
-    else:
-        ss = secondary_structure[::-1]
-        pn = pseudoknot_numbering[::-1].split(" ")
-    n = None
-    d = {}
-    closing = False
-    stack = []
+
     f = open(path, "w")
-    for i, c in enumerate(secondary_structure):
-        if c in "P":
-            if n == None:
-                n = pn.pop(0)
-                if n in d: closing = True
-            if closing:
-                f.writelines(get_traps(d[n].pop(), i))
-            else:
-                d.setdefault(n, []).append(i)
+    for i, b in enumerate(bases):
+        if b.p_num:
+            f.writelines(get_traps(bases.index(b.pair), i))
         else:
-            n = None
-            closing = False
-            if not only_pseudoknots:
-                if c == "(":
-                    stack.append(i)
-                elif c == ")":
-                    f.writelines(get_traps(stack.pop(), i))
+            if not only_pseudoknots and b.pair:
+                f.writelines(get_traps(bases.index(b.pair), i))
     f.close()
     return path
+
+def generate_input(input_parameters, output):
+    """Generates an OXDNA-simulation input file.
+
+    Args:
+        input_parameters <dict<param, val>>
+        output -- str: output path
+
+    Returns:
+        str -- path to the generated file
+    """
+    input_file = os.path.join(work_path, output + ".input")
+
+    with open(input_file, "w") as f:
+        content = "\n".join([p + "=" + str(input_parameters[p]) for p in input_parameters])
+        f.write(content)
+
+    return input_file
 
 def get_traps(i1, i2):
     """ Generates kinetic traps for the given indices of bases
 
     args:
-        i1 -- first index
-        i2 -- second index
+        i1 -- int, first index
+        i2 -- int, second index
 
     returns:
-        str -- the trap
+        str -- the trap in oxdna input format
     """
     result = []
     for i in [i1, i2]:
@@ -232,15 +316,15 @@ def read_template(template):
     """ Reads an OXDNA template into a dictionary
 
     args:
-        template -- path of the template
+        template -- str: path of the template
 
     returns:
-        dictionary -- argument => value
+        dict<arg, val>
     """
     content = {}
     with open(template) as f:
         for l in f:
-            line = l.strip()
+            line = l.strip() #.replace("$rpoly", script_path)
             if line.startswith("#") or len(line) < 1:
                 continue
             p, k = line.split("=")
@@ -250,7 +334,9 @@ def read_template(template):
 def run_relaxation(input_params):
     """ Runs relaxation for the input parameters dictionary.
 
-    returns:
+    Args:
+        input_params -- dict<param, val>
+    Returns:
         bool -- 0 if successful
     """
     t = NamedTemporaryFile(suffix = ".dat", mode = "w")
@@ -260,7 +346,7 @@ def run_relaxation(input_params):
     x = ""
     cmd = [OXDNA_EXE, t.name]
     kwargs = {"stderr": subprocess.PIPE, "stdout": subprocess.PIPE}
-    #if verbose: kwargs["stdout"] = None
+    if verbose: kwargs = {}
     with subprocess.Popen(cmd, **kwargs) as sp:
         while sp.poll() == None:
             try:
@@ -274,11 +360,11 @@ def run_relaxation(input_params):
 def get_direction(pos1, pos2):
     """ Gets the normalized direction vector from pos1 to pos2
     Args:
-        pos1
-        pos2
+        pos1 -- Vector
+        pos2 -- Vector
 
     Returns:
-        direction
+        direction -- Vector
     """
     d = [t[1] - t[0] for t in zip(pos1, pos2)]
     return normalize(d)
@@ -286,10 +372,10 @@ def get_direction(pos1, pos2):
 def normalize(v):
     """ Normalizes v
     Args:
-        v -- vector
+        v -- Vector
 
     Returns:
-        vector
+        Vector
     """
     l = sum([t ** 2 for t in v]) ** -0.5
     return [l * t for t in v]
@@ -297,11 +383,11 @@ def normalize(v):
 def cross(v1, v2):
     """ Calculates the cross product of v1 and v2
     Args:
-        v1
-        v2
+        v1 -- Vector
+        v2 -- Vector
 
     Returns:
-        v1 x v2
+        Vector -- v1 x v2
     """
     n = [v1[1] * v2[2] - v1[2] * v2[1],
          v1[2] * v2[0] - v1[0] * v2[2],
@@ -311,8 +397,8 @@ def cross(v1, v2):
 def distance(v1, v2):
     """ Calculates the euclidian distance between v1 and v2
     Args:
-        v1
-        v2
+        v1 -- Vector
+        v2 -- Vector
 
     Returns:
         float
@@ -321,17 +407,14 @@ def distance(v1, v2):
     return n ** 0.5
 
 
-def generate_conf(base_list, output, five_to_three = False, size = 100):
+def generate_conf(bases, output, size = 100):
     """Generates a confiugration file for oxrna
 
     Args:
-        base_list -- bases in 5'-3'-order
-        output -- output path
-
+        bases -- list<Base>: bases in 5'-3'-order
+        output -- str: output path
     KWargs:
-        five_to_three -- read from five prime to three prime
-        size -- the size of the bounding cube edge
-
+        size -- float: the size of the bounding cube edge
     Returns:
         str -- path of the generated file
     """
@@ -340,82 +423,144 @@ def generate_conf(base_list, output, five_to_three = False, size = 100):
         path += ".conf"
     print("Generating the initial confiugration file {}".format(path))
 
-    bases = base_list[:] if five_to_three else base_list[::-1]
-
     T = 0
     L = " ".join([str(t) for t in 3 * [size]])
     E = "0 0 0"
 
     f = open(path, "w")
     f.write("t = {}\nb = {}\nE = {}\n".format(T, L, E))
-    direction = [1, 0, 0]
-    base_versor = [0, 1, 0]
-    last = None
-    for i in range(len(bases)):
-        base = bases[i]
-        if base.pair:
-            base_versor = [(1.0 / 1.0)*x for x in get_direction(base.position, base.pair.position)]
+
+    i = 0
+    stack = []
+    last_input = None
+    transform = None # used if next base is unpaired, i.e., at the end of helix
+    for i, base in enumerate(bases):
+        if not base.pair:
+            stack.insert(0, base)
+            continue
+        try:
+            if all([bases[i + j].pair for j in range(4)]):
+                n_position = [bases[i + j].position for j in range(4)]
+                helix_bb = np.matrix((*n_position,)).transpose()
+                #print("----")
+                #print(helix_bb)
+                transform = helix_bb * reference_helix_bb_inv
+        except IndexError:
+            pass
+        if i + 3 < len(bases) and all([bases[i + j].pair for j in range(4)]):
+            input_mats = transform, reference_helix_input_1
+        elif i + 2 < len(bases) and all([bases[i + j].pair for j in range(3)]):
+            input_mats = transform, reference_helix_input_2
+        elif i + 1 < len(bases) and all([bases[i + j].pair for j in range(2)]):
+            input_mats = transform, reference_helix_input_3
         else:
-            base_versor = [x for x in base_versor]
-        base_position = [((1.0 / 1.0)*x + 0 * y) for x, y in zip(base.position, base_versor)]
-        if last:
-            direction = get_direction(last, base.position)
-            print(distance(last, base_position))
-        last = base_position
-        norm = [(1.0 / 1.0) * x for x in cross(base_versor, direction)]
+            input_mats = transform, reference_helix_input_4
+            #base.pair.input_mats = transform, reference_helix_input_4
+        #print(np.linalg.cond(transform))
+        #print("===")
+        input_pos = (input_mats[0] * input_mats[1])[:,0]
+        #print(input_pos)
+        input_dir_1 = (np.linalg.inv(input_mats[0]).transpose() * input_mats[1])[:,1]
+        input_dir_2 = (np.linalg.inv(input_mats[0]).transpose() * input_mats[1])[:,2]
+        #print(np.linalg.norm(input_dir_1))
+        #print(":::", input_mats[0] * input_mats[1])
+        current_input = (input_pos, input_dir_1, input_dir_2)
+        #print(current_input)
+        #print("---")
+        #process stack
+        f.write(process_unpaired(stack, last_input, current_input))
+        stack.clear()
 
-        r = " ".join([str(t) for t in base_position])
-        b = " ".join([str(t) for t in base_versor])
-        n = " ".join([str(t) for t in norm])
-        v = "0 0 0"
-        l = "0 0 0"
-
-        f.write("{} {} {} {} {}\n".format(r, b, n, v, l))
+        last_input = current_input
+        print(i, base)
+        f.write(extend_conf(*current_input))
+    if len(stack) > 0:
+        f.write(process_unpaired(stack, last_input, current_input))
     #sys.exit(0)
+    print(len(bases))
+    f.close()
     return path
 
-def generate_top(primary_structure, output, five_to_three = False):
+def process_unpaired(stack, input1, input2):
+    """ Handles the transformation of the unpaired nucleotides
+
+    Args:
+        stack -- list<Base>
+        input1 -- Vector: last transformed vector
+        input2 -- Vector: the next transformed vector
+    Returns:
+        str -- transformed bases in oxdna input format
+    """
+    r = []
+    size = len(stack) + 1
+    for j, b in enumerate(stack):
+        if np.all(input1) and not np.all(np.equal(input1, input2)):
+            print("Interpolating unpaired base {}.".format(b))
+            s_input = [((j + 1) / size) * x + ((size - 1 - j) / size) * y for x, y in zip(input1, input2)]
+        else:
+            print("Warning: Unable to interpolate unpaired base {}.".format(b))
+            s_input = [x.copy() for x in input2]
+            s_input[0] = s_input[0] + 0.4 * np.matrix([j, 1, 0, 0]).transpose()
+            print(s_input)
+        r.append(extend_conf(*s_input))
+    return "".join(r)
+
+def extend_conf(input_pos, input_dir_1, input_dir_2):
+    """ Create a new entry for the configuration file
+
+    Args:
+        input_pos -- Vector: center of mass
+        input_dir_1 -- Vector: base versor
+        input dir_2 -- Vector: backbone versor
+    Returns:
+        str -- the new entry in oxdna input format
+    """
+    #print(input_dir_1 / input_dir_1[-1])
+    r = " ".join([str(t) for t in list((input_pos * magic_value).flat)[:3]])
+    b = " ".join([str(t) for t in list((input_dir_1 / np.linalg.norm(input_dir_1[:3]) * 1.0).flat)[:3]])
+    n = " ".join([str(t) for t in list((input_dir_2 / np.linalg.norm(input_dir_2[:3]) * 1.0).flat)[:3]])
+    v = "0 0 0"
+    l = "0 0 0"
+
+    nl = "{} {} {} {} {}\n".format(r, b, n, v, l)
+    return nl
+
+
+def generate_top(bases, output):
     """Generates a topology file for oxrna
 
     Args:
-        primary_structure
-        output -- path
-
-    KWArgs:
-        five_to_three -- read from 5' to 3'
-
+        bases -- list<Base>
+        output -- str: path to the output file
     Returns:
-        str -- output path
+        str -- path to the created file
     """
     path = output.split(".conf")[0]
     if not path.endswith(".top"):
          path += ".top"
     print("Generating a topology file {}".format(path))
 
-    ps = primary_structure if five_to_three else primary_structure[::-1]
     f = open(path, "w")
     strands = 1
     for s in range(1, strands + 1):
-        num = len(ps)
+        num = len(bases)
         f.write("{} {}\n".format(num, strands))
-        for i, b in enumerate(ps):
+        for i, b in enumerate(bases):
             prev = i - 1
             next = i + 1 if i < num - 1 else -1
-            f.write("{} {} {} {}\n".format(s, b, prev, next))
+            f.write("{} {} {} {}\n".format(s, b.type, prev, next))
     f.close()
     return path
 
 
 def db_to_dict(s_str, i = 0, d = {}):
-    """ Converts a dotbracket string to a dictionary
+    """ Converts a dotbracket string to a dictionary of indices and their pairs
 
     Args:
-        s_str -- secondary_structure
-
+        s_str -- str: secondary_structure in dotbracket notation
     KWargs:
-        i -- start index
-        d -- the dictionary so far
-
+        i -- int: start index
+        d -- dict<index1, index2>: the dictionary so far
     Returns:
         dictionary
     """
@@ -440,8 +585,9 @@ class Base():
     and its pair
     """
 
-    def __init__(self, position, p_num = None):
-        self.position = [float(t) for t in position]
+    def __init__(self, type, position, p_num = None):
+        self.type = type
+        self.position = np.array(position + [1], dtype=np.float)
         self.p_num = p_num
         self.pair = None
 
@@ -451,17 +597,32 @@ class Base():
         self.pair = other
         other.pair = self
 
+    def dist(self, other):
+        return np.linalg.norm(other.position - self.position)
 
-def get_bases(positions, secondary_structure, pseudoknot_numbering):
+    def translate(self, v):
+        self.position += v
+        print(self.position)
+
+    def __repr__(self):
+        if self.pair:
+            return "{} -- {}".format(self.type, self.pair.type)
+        else:
+            return "{}".format(self.type)
+
+
+def get_bases(positions, primary_structure, secondary_structure, pseudoknot_numbering, five_to_three = False):
     """Generates a list of bases
 
     Args:
-        positions
-        secondary_structure
-        pseudoknot_numbering
-
+        positions -- str: serialized 3-tuples of Vectors
+        primary_structure -- str: IUPAC primary structure
+        secondary_structure -- str: dotbracket secondary structure
+        pseudoknot_numbering -- str: list of pseudoknot numbers according to SNAC-format
+    Kwargs:
+        five_to_three -- bool: read 5'-3'-direction instead of 3'-5'
     Returns:
-        list
+        list<Base>
     """
     d = db_to_dict(secondary_structure)
     pos_l = positions.strip("[ ]").split(",")
@@ -469,21 +630,29 @@ def get_bases(positions, secondary_structure, pseudoknot_numbering):
     bases = []
     pn = pseudoknot_numbering.split(" ")
     for i in range(len(secondary_structure)):
-        if secondary_structure[i] == "P":
+        if secondary_structure[i] in "[]":
             if not p_num:
                 p_num = pn.pop(0)
         else:
             p_num = None
         pos = pos_l[i].strip().split(" ")
-        b = Base(pos, p_num)
+        b = Base(primary_structure[i], pos, p_num)
         other_i = d[i]
-        if other_i and other_i < i:
+        if other_i != None and other_i < i:
             b.set_pair(bases[other_i])
         bases.append(b)
+    #set pseduoknot Pairs
+    stacks = {}
     for b in bases:
-        #print(b.position)
-        pass
-    return bases
+        if b.p_num:
+            stacks.setdefault(b.p_num, []).append(b)
+    for i in stacks:
+        stack = stacks[i]
+        for j in range(int(len(stack) / 2)):
+            other = stack[-j - 1]
+            stack[j].set_pair(other)
+
+    return bases if five_to_three else bases[::-1]
 
 if __name__ == "__main__":
     main(sys.argv)

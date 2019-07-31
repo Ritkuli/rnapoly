@@ -1,40 +1,38 @@
 bl_info = {
     'name': 'Sterna',
+    'author': 'Antti Elonen',
     'category': 'All',
     'version': (0, 0, 1),
     'blender': (2, 79, 0)
 }
 
-modulesNames = ["blenderEdgeGroups", "sternaMain", "sternaExport", "sternaImport"]
+try:
+    import importlib
+    importlib.reload(blenderEdgeGroups)
+    importlib.reload(sternaMain)
+    importlib.reload(sternaEdit)
+    importlib.reload(sternaExport)
+    importlib.reload(sternaImport)
+    importlib.reload(propDefs)
+    importlib.reload(sternaStrand)
+except:
+    from . import blenderEdgeGroups, sternaMain, sternaEdit, sternaExport, sternaImport, propDefs, sternaStrand
 
-import sys
-import importlib
-
-modulesFullNames = {}
-for currentModuleName in modulesNames:
-    if 'DEBUG_MODE' in sys.argv:
-        modulesFullNames[currentModuleName] = ('{}'.format(currentModuleName))
-    else:
-        modulesFullNames[currentModuleName] = ('{}.{}'.format(__name__, currentModuleName))
-
-for currentModuleFullName in modulesFullNames.values():
-    if currentModuleFullName in sys.modules:
-        importlib.reload(sys.modules[currentModuleFullName])
-    else:
-        globals()[currentModuleFullName] = importlib.import_module(currentModuleFullName)
-        setattr(globals()[currentModuleFullName], 'modulesNames', modulesFullNames)
+import sys, os, bpy
 
 def register():
-    for currentModuleName in modulesFullNames.values():
-        if currentModuleName in sys.modules:
-            if hasattr(sys.modules[currentModuleName], 'register'):
-                sys.modules[currentModuleName].register()
+    blenderEdgeGroups.register()
+    sternaMain.register()
+    sternaEdit.register()
+    sternaExport.register()
+    sternaImport.register()
 
 def unregister():
-    for currentModuleName in modulesFullNames.values():
-        if currentModuleName in sys.modules:
-            if hasattr(sys.modules[currentModuleName], 'unregister'):
-                sys.modules[currentModuleName].unregister()
+    blenderEdgeGroups.unregister()
+    sternaMain.unregister()
+    sternaEdit.unregister()
+    sternaExport.unregister()
+    sternaImport.unregister()
 
 if __name__ == "__main__":
     register()

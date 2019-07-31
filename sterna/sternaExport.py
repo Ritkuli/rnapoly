@@ -2,23 +2,11 @@ import bpy, sys, importlib, math, re
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty, IntProperty
 from bpy.types import Operator
-try:
-    import sternaMain
-except ImportError:
-    pass
-
-
-def init():
-    global sternaMain
-    try:
-        sternaMain
-    except:
-        sternaMain = sys.modules[modulesNames['sternaMain']]
+from . import sternaMain
 
 def register():
     bpy.utils.register_class(SternaExport)
     bpy.types.INFO_MT_file_export.append(menu_sterna_export)
-    init()
 
 
 def unregister():
@@ -110,22 +98,24 @@ def export(context, filepath, meta_data, add_promoters, ug_proportion, ug_min, p
     """ Exports a sterna to a SNAC file according to input parameters.
 
     Args:
-        context
-        filepath
+        context -- Blender Context
+        filepath -- str, name of the exported file
         meta_data -- bool, add meta data
         add_promoters -- bool, add promoters at the start and the end of the strand
         ug_proportion -- float, proportion of basepairs to replace with U's and G's
-        ug_min -- minimum number of UG pairs per domain
+        ug_min -- int, minimum number of UG pairs per domain
         padding -- char, replace padding between helices with this
     """
     #import importlib
     #importlib.reload(sternaMain)
     positions, dotbracket, p_numbering = sternaMain.export_sterna_helix(context.object)
+    print("Positions: {}; ss: {}, pseudoknots: {}".format(len(positions.split(",")), len(dotbracket), len(p_numbering)))
+    print(dotbracket.count("("), dotbracket.count(")"))
 
     partial_primary = get_partial_primary(dotbracket, ug_proportion, ug_min, padding)
+    print(len(partial_primary))
     partial_primary = re.sub("\(|\)|\[|\]|\.", "N", partial_primary)
-    partial_primary = re.sub("U|G", "K", partial_primary)
-
+    partial_primary = re.sub("{|}", "K", partial_primary) # Replace every n:th base with a U/G pair
 
     if add_promoters:
         positions = 20 * "0 0 0, " + positions + 15 * ", 0 0 0"
@@ -141,9 +131,8 @@ def export(context, filepath, meta_data, add_promoters, ug_proportion, ug_min, p
                 partial_primary = partial_primary[:i-2] + "CCC" + partial_primary[i+1:]
                 break
 
-
     assert len(dotbracket) == len(partial_primary) == len(positions.split(","))
-    print("partial primary:", partial_primary)
+    #print("partial primary:", partial_primary)
 
     with open(filepath, "w") as f:
 
@@ -168,7 +157,7 @@ def export(context, filepath, meta_data, add_promoters, ug_proportion, ug_min, p
             f.write("# the following numbers are assigned to pseudoknot complexes in the same order as they appear in the secondary structure. For instance, 1 2 1 2 would mean that the first complex connects to the third one, and the second one connects to the fourth. \n")
         f.write("pseudoknot_numbering: ")
         f.write(p_numbering + "\n")
-        
+
         #positions
         if meta_data:
             f.write("# The coordinates are represented as comma-separated three-tuples, x y z, in nanometers. The coordinates correspond to the primary and secondary structure in the same order.\n")
@@ -181,6 +170,10 @@ def export(context, filepath, meta_data, add_promoters, ug_proportion, ug_min, p
 
 def get_primary_meta(primary_structure, secondary_structure):
     """ returns a human readable version of the primary structure.
+
+    Args:
+        primary_structure -- str, IUPAC notation
+        secondary_structure -- str, dotbracket notation
 
     Returns:
         str
@@ -196,12 +189,15 @@ def get_primary_meta(primary_structure, secondary_structure):
 def get_secondary_meta(secondary_structure):
     """ Returns a human readable version of the secondary structure
 
+    Args:
+        secondary_structure -- str, dotbracket notation
+
     Returns:
         str
     """
     domains = split_to_domains(secondary_structure)
     result = " | ".join(["".join(x) for x in domains])
-    print("Domains:", result)
+    #print("Domains:", result)
     return result
 
 
@@ -209,16 +205,16 @@ def get_partial_primary(secondary_structure, ug_proportion, ug_min, padding):
     """ Returns the secondary structure with certain entries replaced with known primary structure bases.
 
     Args:
-        secondary_structure
+        secondary_structure -- str, dotbracket notation
         ug_proportion -- float, proportion of base pairs to replace with U's and G's
-        ug_min -- minimum number of UG pairs per domain
+        ug_min -- int, minimum number of UG pairs per domain
         padding -- char, replace padding between helices with this
 
     Returns:
         str
     """
-    r_open = "U"
-    r_close = "G"
+    r_open = "{"
+    r_close = "}" #{ and } mark the UG pairs preventing secondary structure in DNA
     r_padding = padding
     if ug_proportion == 0 and ug_min == 0 and padding == 'NONE':
         return None
@@ -226,14 +222,14 @@ def get_partial_primary(secondary_structure, ug_proportion, ug_min, padding):
     primary_structure = []
     for d in domains:
         s = []
-        print("".join(d))
+        #print("".join(d))
         if ("(" in d or ")" in d) and not ("[" in d or "]" in d):
             n = max(int(len(d) * ug_proportion), ug_min)
             if n < 1:
                 s.extend(d)
             else:
                 p = int(len(d) / n)
-                print("prop: {}, len: {}, n: {}, p: {}".format(ug_proportion, len(d), n, p))
+                print("{} -- prop: {}, len: {}, n: {}, p: {}".format("".join(d), ug_proportion, len(d), n, p))
                 for i, sym in enumerate(d):
                     i += int(p/2)
                     if i % p == 0:
@@ -260,13 +256,16 @@ def get_partial_primary(secondary_structure, ug_proportion, ug_min, padding):
 def split_to_domains(secondary_structure):
     """ Splits the secondary structure to domains.
 
+    Args:
+        secondary_structure -- str, dotbracket notation
+
     Returns:
-        array
+        list<str> -- domains, dotbracket notation
     """
     pairs = {}
     stack = []
-    p1 = "..[[[[[[."
-    p2 = "..]]]]]]."
+    p1 = "((..[[[[[[.))"
+    p2 = "((..]]]]]].))"
     ss = secondary_structure.replace(p1, "P1").replace(p2, "P2")
     #print(ss)
 
@@ -280,7 +279,7 @@ def split_to_domains(secondary_structure):
     domains = []
     for i, sym in enumerate(ss):
         if sym == "(":
-            if pairs.get(i - 1) == None:
+            if i == 0 or ss[i - 1] != "(":
                 domains.append([sym])
             elif pairs[i] == pairs[i - 1] - 1:
                 domains[-1].append(sym)
@@ -299,7 +298,8 @@ def split_to_domains(secondary_structure):
             domains[i] = p1
         elif "".join(d) == "P2":
             domains[i] = p2
-    #print(domains)
+    for d in domains:
+        print("".join(d))
     return domains
 
 

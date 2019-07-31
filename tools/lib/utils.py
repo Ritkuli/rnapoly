@@ -88,6 +88,7 @@ def remove_file(path):
     returns:
         bool -- success
     """
+    if not path: return 1
     try:
         os.remove(path)
         return 0

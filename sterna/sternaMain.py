@@ -1,6 +1,7 @@
 import bpy, bmesh, mathutils, sys, traceback
 from . import blenderEdgeGroups, sternaStrand, propDefs
 from .sternaStrand import get_bases, Strand, create_sterna_helix, create_mesh
+from bpy.props import *
 
 class BASE_PRIMITIVE():
 
@@ -55,7 +56,7 @@ class AddSterna(bpy.types.Operator):
         obj.isSternaHelix = True
         context.scene.objects.link(obj)
         obj.select = True
-        bpy.context.scene.objects.active = obj
+        bpy.context.view_layer.objects.active = obj
         return {'FINISHED'}
 
 class AddSternaMenu(bpy.types.Menu):
@@ -76,12 +77,11 @@ class SternaPanel(bpy.types.Panel):
     """A panel with the buttons and parameters required to generate an RNA nano-
     structure
     """
-    bl_category = 'MyTab'
     bl_label = "Sterna"
-    bl_idname = "sterna_main_panel"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "modifier"
+    bl_idname = "STERNA_PT_main_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Sterna'
 
     @classmethod
     def poll(cls, context):
@@ -90,25 +90,18 @@ class SternaPanel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.operator_context = 'INVOKE_REGION_WIN'
 
         obj = context.object
-        me = context.mesh
 
         row = layout.row()
         row.label(text="Sterna", icon='WORLD_DATA')
-        row = layout.row()
-        row.label(text="Parameters")
-        row = layout.row()
-        row.label(text="Resolution")
-        row = layout.row()
-        row.prop(obj, 'scaleParam')
-        row = layout.row()
+        """
         row.label(text="Visual parameters")
         row = layout.row()
         row.prop(obj, 'genMesh')
         if obj.genMesh:
             row.prop(obj, 'sizeParam')
+        """
         row = layout.row()
         row.label(text="Physical parameters")
         row = layout.row()
@@ -134,6 +127,16 @@ class SternaPanel(bpy.types.Panel):
         row = layout.row()
         row.prop(obj, 'klArmOffsetParam')
         row = layout.row()
+        row.prop(obj, 'ulParam')
+        row = layout.row()
+        if obj.ulParam:
+            row.prop(obj, 'numTurnsParam')
+            row = layout.row()
+        else:
+            row.prop(obj, 'scaleParam')
+            row = layout.row()
+
+        row = layout.row()
         row.prop(obj, 'rstParam')
         if not obj.rstParam:
             row = layout.row()
@@ -141,8 +144,8 @@ class SternaPanel(bpy.types.Panel):
             col.template_list("UI_UL_list", "edge_groups", obj, "edge_groups", obj, "active_edge_group_index")
 
             col = row.column(align=True)
-            col.operator("object.edge_group_add", icon='ZOOMIN', text="")
-            col.operator("object.edge_group_delete", icon='ZOOMOUT', text="")
+            col.operator("object.edge_group_add", icon='ADD', text="")
+            col.operator("object.edge_group_delete", icon='REMOVE', text="")
             if obj.edge_groups:
                 col.separator()
                 col.operator("object.edge_group_move", icon='TRIA_UP', text="").direction = 'UP'
@@ -162,12 +165,6 @@ class SternaPanel(bpy.types.Panel):
         row = layout.row()
         row.prop(obj, 'useAdaptiveOffset')
         row = layout.row()
-        row.prop(obj, 'ulParam')
-        row = layout.row()
-        if obj.ulParam:
-            row.prop(obj, 'numTurnsParam')
-            row = layout.row()
-        row = layout.row()
         row.label(text="Post processing")
         row = layout.row()
         row.prop(obj, 'setNickAtVertex')
@@ -179,6 +176,7 @@ class SternaPanel(bpy.types.Panel):
         row = layout.row()
         row.operator("object.generate_sterna")
 
+
 class GenerateSterna(bpy.types.Operator):
     """ An operator generating a sterna helix from a mesh.
     """
@@ -187,8 +185,6 @@ class GenerateSterna(bpy.types.Operator):
     bl_label = "Generate Structure"
     bl_options = {'REGISTER', 'UNDO'}
 
-    params = None
-
     @classmethod
     def poll(cls, context):
         obj = context.object
@@ -196,19 +192,13 @@ class GenerateSterna(bpy.types.Operator):
 
     def execute(self, context):
         prev_mode = context.object.mode
-        i_params = {p: getattr(context.object, p) for p in propDefs.edit_props}
-        if self.params != i_params:
-            self.params = i_params
-            for p in propDefs.edit_props:
-                setattr(self, p, i_params[p])
-        mod_params = {p: getattr(self, p) for p in propDefs.edit_props}
         try:
-            print("Mod Parameters:", mod_params)
-            print("UI Parameters:", i_params)
-            print(context.object)
-            print(context.object.rstParam)
+            #print("Mod Parameters:", mod_params)
+            #print("UI Parameters:", i_params)
+            #print(context.object)
+            #print(context.object.rstParam)
             bpy.ops.object.mode_set(mode="EDIT")
-            bases, scale = get_bases(context, mode = sternaStrand.SternaGenModes.FULL, mod_params = mod_params)
+            bases, scale = get_bases(context, mode = sternaStrand.SternaGenModes.FULL)
         except Strand.StrandGenerationException as e:
             print(e)
             return {'FINISHED'}
@@ -221,14 +211,14 @@ class GenerateSterna(bpy.types.Operator):
             bpy.ops.object.mode_set(mode=prev_mode)
         if context.object.genMesh: create_mesh(bases, context)
         ob = create_sterna_helix(context, bases, scale)
-        #context.scene.objects.active = ob
+        bpy.context.view_layer.objects.active = ob
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.object.mode_set(mode=prev_mode)
         return {'FINISHED'}
 
-gs = {p: getattr(GenerateSterna, p) for p in ["execute", "poll", "bl_idname", "bl_label", "bl_options", "params"]}
-gs.update(propDefs.edit_props)
-GenerateSterna = type("gs", (bpy.types.Operator,), gs)
+#gs = {p: getattr(GenerateSterna, p) for p in ["execute", "poll", "bl_idname", "bl_label", "bl_options", "params"]}
+#gs.update(propDefs.edit_props)
+#GenerateSterna = type("gs", (bpy.types.Operator,), gs)
 
 
 def find_start(bm):
@@ -312,7 +302,7 @@ def export_sterna_helix(object):
 
     c_v = bm.verts[object.fivePrime]
     while True:
-        print(c_v)
+        #print(c_v)
         v = c_v
         coords.append(v.co * object.scaleParam)
         edges = v.link_edges
@@ -434,14 +424,18 @@ def register():
     bpy.utils.register_class(GenerateSterna)
     bpy.utils.register_class(SternaPanel)
     bpy.utils.register_class(AddSterna)
-    bpy.types.INFO_MT_mesh_add.prepend(draw_sterna_menu)
+    #bpy.types.INFO_MT_mesh_add.prepend(draw_sterna_menu)
+
+    #bpy.utils.register_tool(SternaTool, after={"builtin.scale_cage"}, separator=True, group=True)
 
 
 def unregister():
     bpy.utils.unregister_class(GenerateSterna)
     bpy.utils.unregister_class(SternaPanel)
     bpy.utils.unregister_class(AddSterna)
-    bpy.types.INFO_MT_mesh_add.remove(draw_sterna_menu)
+    #bpy.types.INFO_MT_mesh_add.remove(draw_sterna_menu)
+
+    #bpy.utils.unregister_tool(SternaTool)
 
 
 if __name__ == "__main__":

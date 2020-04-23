@@ -1,0 +1,48 @@
+##############################
+####  PROGRAM PARAMETERS  ####
+##############################
+backend = CUDA
+backend_precision = mixed
+use_edge = 1
+CUDA_list = verlet
+CUDA_sort_every = 0
+
+##############################
+####    SIM PARAMETERS    ####
+##############################
+sim_type = MD
+steps = 10e9
+newtonian_steps = 103
+diff_coeff = 2.55
+thermostat = john
+
+T = 37C
+dt = 0.005
+verlet_skin = 0.05
+
+##############################
+####     INTERACTIONS     ####
+##############################
+interaction_type = RNA2
+salt_concentration = 1.0
+rcut = 2.0
+
+##############################
+####    INPUT / OUTPUT    ####
+##############################
+topology = .
+conf_file = .
+seq_dep_file = .
+lastconf_file = last.conf
+trajectory_file = trajectory.dat
+refresh_vel = 1
+#log_file = log.dat
+no_stdout_energy = 0
+restart_step_counter = 1
+energy_file = energy.dat
+print_conf_interval = 1e5
+print_conf_ppc = 51
+print_energy_every = 1e5
+time_scale = linear
+external_forces=0
+use_average_seq = 0

@@ -89,13 +89,14 @@ def create_sterna_helix(context, bases, scale):
     ob.location = context.object.location if context.object else mathutils.Vector()
 
     scn = bpy.context.scene
-    scn.objects.link(ob)
+    scn.collection.objects.link(ob)
     ob.isSternaHelix = True
     ob.scaleParam = scale
     ob.prevScaleParam = scale # also set the previous scale, since default=1
-    prev_act = scn.objects.active
-    scn.objects.active = ob
-    ob.select = True
+    #prev_act = scn.objects.active
+    #scn.objects.active = ob
+    ob.select_set(True)
+    context.view_layer.objects.active = ob
 
     bases_proper = []
     nicks = set()
@@ -157,7 +158,7 @@ def create_sterna_helix(context, bases, scale):
     for v in bm.verts:
         v.select = True
 
-    scn.objects.active = prev_act
+    #scn.objects.active = prev_act
     return ob
 
 
@@ -1057,7 +1058,7 @@ def sort_edges(vertex, previous):
     angles = []
     for e in edges:
         dir_t = e.verts[0].co + e.verts[1].co - 2 * vertex.co
-        dir2 = basis * dir_t
+        dir2 = basis @ dir_t
         #print(":::", dir2.x * dir + dir2.y * ort + dir2.z * nor)
         phi = math.atan2(dir2.y, dir2.z)
         if phi < 0: phi += 2 * math.pi

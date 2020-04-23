@@ -2,8 +2,8 @@ bl_info = {
     'name': 'Sterna',
     'author': 'Antti Elonen',
     'category': 'All',
-    'version': (0, 0, 1),
-    'blender': (2, 79, 0)
+    'version': (1, 0, 20200203),
+    'blender': (2, 82, 0)
 }
 
 try:

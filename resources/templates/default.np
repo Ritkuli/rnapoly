@@ -1,0 +1,11 @@
+material = rna
+temperature[C] = 26.0
+trials = 1
+sodium[M] = 1.0
+dangles = some
+allowwobble = true
+domain a = None
+complex C = a
+C.structure = None
+prevent = KKKKKK, MMMMMM, RRRRRR, SSSSSS, WWWWWW, YYYYYY
+stop[%] = 0.1

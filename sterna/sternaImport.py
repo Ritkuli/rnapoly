@@ -6,11 +6,11 @@ from . import sternaMain
 
 def register():
     bpy.utils.register_class(SternaImport)
-    bpy.types.INFO_MT_file_import.append(menu_sterna_import)
+    bpy.types.TOPBAR_MT_file_import.append(menu_sterna_import)
 
 def unregister():
     bpy.utils.unregister_class(SternaImport)
-    bpy.types.INFO_MT_file_import.remove(menu_sterna_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_sterna_import)
 
 class SternaImport(Operator, ImportHelper):
     """ Import a sterna from a SNAC file
@@ -20,13 +20,13 @@ class SternaImport(Operator, ImportHelper):
 
     filename_ext = ".snac"
 
-    filter_glob = StringProperty(
+    filter_glob: StringProperty(
             default="*.snac",
             options={'HIDDEN'},
             maxlen=255,
             )
 
-    use_setting = BoolProperty(
+    use_setting: BoolProperty(
             name="Create mesh",
             description="TODO",
             default=False,

@@ -11,23 +11,22 @@ class SternaEditPanel(bpy.types.Panel):
     """A panel with the buttons and parameters required to generate an RNA nano-
     structure
     """
-    bl_category = 'MyTab'
     bl_label = "Sterna"
-    bl_idname = "sterna_edit_panel"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = "modifier"
+    bl_idname = "STERNA_PT_edit_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Sterna'
+
 
     @classmethod
     def poll(cls, context):
         obj = context.object
-        return obj.isSternaHelix
+        return (obj and obj.type in {'MESH', 'LATTICE'}) and obj.isSternaHelix
 
     def draw(self, context):
         layout = self.layout
 
         obj = context.object
-        me = context.mesh
 
         row = layout.row()
         row.label(text="Sterna", icon='WORLD_DATA')
@@ -55,6 +54,7 @@ class SternaEditPanel(bpy.types.Panel):
         row.operator("mesh.hide")
         row.operator("mesh.reveal")
         row = layout.row()
+        """ These are bugged in 2.81 and probably useless anyway
         row.label(text="Add")
         row = layout.row()
         row.operator("object.add_helix")
@@ -63,8 +63,9 @@ class SternaEditPanel(bpy.types.Panel):
         row.operator("object.add_loop")
         row.operator("object.add_kissing_loop")
         row = layout.row()
-        row.label(text="Modify")
-        row = layout.row()
+        """
+        #row.label(text="Modify")
+        #row = layout.row()
         row.operator("object.select_strand")
 
 
@@ -152,9 +153,11 @@ class SelectFivePrime(bpy.types.Operator):
         return obj.isSternaHelix == 1
 
     def execute(self, context):
+        bpy.ops.object.mode_set(mode = 'EDIT')
         key = context.object.fivePrime
         ob = context.object
         bm = bmesh.from_edit_mesh(ob.data)
+        bm.verts.ensure_lookup_table()
         v = bm.verts[key]
         v.select = True
         bm.select_history.add(v)
@@ -209,11 +212,11 @@ class SelectStrand(bpy.types.Operator):
     bl_label = "Select Strand"
     bl_options = {'REGISTER', 'UNDO'}
 
-    selectionCount = IntProperty(
+    selectionCount: IntProperty(
         name="Select #",
     )
 
-    selectBothStrands = BoolProperty(
+    selectBothStrands: BoolProperty(
         name="Also select paired strand.",
     )
 
@@ -276,12 +279,12 @@ class AddHelix(bpy.types.Operator):
     bl_label = "Add Helix"
     bl_options = {'REGISTER', 'UNDO'}
 
-    mousePositionParam = FloatVectorProperty(
+    mousePositionParam: FloatVectorProperty(
         name="mousePositionParam",
         size=3,
     )
 
-    rotationParam = bpy.types.Object.rotationParam
+    rotationParam: bpy.types.Object.rotationParam
 
     @classmethod
     def poll(cls, context):
@@ -306,12 +309,12 @@ class AddDoubleHelix(bpy.types.Operator):
     bl_label = "Add Double Helix"
     bl_options = {'REGISTER', 'UNDO'}
 
-    mousePositionParam = FloatVectorProperty(
+    mousePositionParam: FloatVectorProperty(
         name="mousePositionParam",
         size=3,
     )
 
-    rotationParam = bpy.types.Object.rotationParam
+    rotationParam: bpy.types.Object.rotationParam
 
     @classmethod
     def poll(cls, context):
@@ -336,14 +339,14 @@ class AddKissingLoop(bpy.types.Operator):
     bl_label = "Add Kissing Loop"
     bl_options = {'REGISTER', 'UNDO'}
 
-    mousePositionParam = FloatVectorProperty(
+    mousePositionParam: FloatVectorProperty(
         name="mousePositionParam",
         size=3,
     )
 
-    rotationParam = bpy.types.Object.rotationParam
+    rotationParam: bpy.types.Object.rotationParam
     #klOffsetParam = bpy.types.Object.klOffsetParam
-    klArmOffsetParam = bpy.types.Object.klArmOffsetParam
+    klArmOffsetParam: bpy.types.Object.klArmOffsetParam
 
     @classmethod
     def poll(cls, context):
@@ -375,12 +378,12 @@ class AddLoop(bpy.types.Operator):
     bl_label = "Add Loop"
     bl_options = {'REGISTER', 'UNDO'}
 
-    mousePositionParam = FloatVectorProperty(
+    mousePositionParam: FloatVectorProperty(
         name="mousePositionParam",
         size=3,
     )
 
-    rotationParam = bpy.types.Object.rotationParam
+    rotationParam: bpy.types.Object.rotationParam
 
     @classmethod
     def poll(cls, context):

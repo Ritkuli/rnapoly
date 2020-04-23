@@ -163,43 +163,37 @@ bpy.types.Object.useAdaptiveOffset = BoolProperty(
     default = False
 )
 
-edit_props = {
-    "numTurnsParam": IntProperty(
-        name="Number of full turns",
-        default = 3,
-        min = 0
-    ),
 
-    "springRelaxSteps": IntProperty(
-        name="Relaxation steps",
-        min = 1, max = 10000,
-        default = 100
-    ),
+bpy.types.Object.numTurnsParam = IntProperty(
+    name="Number of full turns",
+    default = 3,
+    min = 0
+)
 
-    "offsetParam": FloatProperty(
-        name="Corner offset multiplier",
-        min = -100.0, max = 100.0,
-        precision = 4,
-        default = 1
-    ),
+bpy.types.Object.springRelaxSteps = IntProperty(
+    name="Relaxation steps",
+    min = 1, max = 10000,
+    default = 100
+)
 
-    "klOffsetParam": IntProperty(
-        name="KL offset",
-        default = 0,
-    ),
+bpy.types.Object.offsetParam = FloatProperty(
+    name="Corner offset multiplier",
+    min = -100.0, max = 100.0,
+    precision = 4,
+    default = 1
+)
 
-    "klArmOffsetParam": IntProperty(
-        name="KL Arm offset",
-        default = 0,
-    ),
+bpy.types.Object.klOffsetParam = IntProperty(
+    name="KL offset",
+    default = 0,
+)
 
-    "stemOffsetParam": IntProperty(
-        name="Stem offset",
-        default = 0,
-    ),
+bpy.types.Object.klArmOffsetParam = IntProperty(
+    name="KL Arm offset",
+    default = 0,
+)
 
-}
-
-
-for prop in edit_props:
-    setattr(bpy.types.Object, prop, edit_props[prop])
+bpy.types.Object.stemOffsetParam = IntProperty(
+    name="Stem offset",
+    default = 0,
+)

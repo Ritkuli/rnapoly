@@ -127,7 +127,7 @@ class EdgeGroupMove(bpy.types.Operator):
     """
     bl_idname = "object.edge_group_move"
     bl_label = "move"
-    direction = bpy.props.StringProperty(name="direction", default="UP")
+    direction: bpy.props.StringProperty(name="direction", default="UP")
     @classmethod
     def poll(cls, context):
         return True
@@ -167,7 +167,7 @@ class EdgeGroupSelect(bpy.types.Operator):
         for e in bm.edges:
             if is_in_edge_group(e[egl], eg_index):
                 e.select = 1
-        bpy.context.scene.objects.active = bpy.context.scene.objects.active
+        bmesh.update_edit_mesh(eo.data, True)
         return {'FINISHED'}
 
 class EdgeGroupDeselect(bpy.types.Operator):
@@ -188,7 +188,7 @@ class EdgeGroupDeselect(bpy.types.Operator):
         for e in bm.edges:
             if is_in_edge_group(e[egl], eg_index):
                 e.select = 0
-        bpy.context.scene.objects.active = bpy.context.scene.objects.active
+        bmesh.update_edit_mesh(eo.data, True)
         return {'FINISHED'}
 
 class EdgeGroupAssign(bpy.types.Operator):
@@ -220,7 +220,7 @@ class EdgeGroupAssign(bpy.types.Operator):
                 edge[egl] = bytes(str(eg_data), "utf-8")
 
         # trigger viewport update
-        bpy.context.scene.objects.active = bpy.context.scene.objects.active
+        #bpy.context.scene.objects.active = bpy.context.scene.objects.active
         return {'FINISHED'}
 
 class EdgeGroupRemove(bpy.types.Operator):
@@ -249,8 +249,8 @@ class EdgeGroupRemove(bpy.types.Operator):
         return {'FINISHED'}
 
 class EdgeGroup(bpy.types.PropertyGroup):
-    name = bpy.props.StringProperty(name="Group Name", default="Unknown")
-    id = bpy.props.IntProperty(name="Group ID")
+    name: bpy.props.StringProperty(name="Group Name", default="Unknown")
+    id: bpy.props.IntProperty(name="Group ID")
 
 
 class ActiveEdgeGroupIndex(bpy.types.PropertyGroup):
@@ -293,7 +293,7 @@ def register():
 
     bpy.types.Object.edge_groups = bpy.props.CollectionProperty(type=EdgeGroup)
     bpy.types.Object.active_edge_group_index = bpy.props.IntProperty(name="Active Edge Group Index")
-    bpy.app.handlers.scene_update_post.append(edit_object_change_handler)
+    #bpy.app.handlers.scene_update_post.append(edit_object_change_handler)
 
 
 def unregister():

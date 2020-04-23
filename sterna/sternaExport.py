@@ -6,12 +6,12 @@ from . import sternaMain
 
 def register():
     bpy.utils.register_class(SternaExport)
-    bpy.types.INFO_MT_file_export.append(menu_sterna_export)
+    bpy.types.TOPBAR_MT_file_export.append(menu_sterna_export)
 
 
 def unregister():
     bpy.utils.unregister_class(SternaExport)
-    bpy.types.INFO_MT_file_export.remove(menu_sterna_export)
+    bpy.types.TOPBAR_MT_file_export.remove(menu_sterna_export)
 
 
 class SternaExport(Operator, ExportHelper):
@@ -23,7 +23,7 @@ class SternaExport(Operator, ExportHelper):
 
     filename_ext = ".snac"
 
-    filter_glob = StringProperty(
+    filter_glob: StringProperty(
             default="*.snac",
             options={'HIDDEN'},
             maxlen=255,  # Max internal buffer length, longer would be clamped.
@@ -31,38 +31,38 @@ class SternaExport(Operator, ExportHelper):
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
-    meta_data = BoolProperty(
+    meta_data: BoolProperty(
             name="Add comments",
             description="Annotate the SNAC file with comments describing the fields.",
-            default=True,
+            default=False,
             )
 
-    generate_ug = BoolProperty(
+    generate_ug: BoolProperty(
             name="Generate UG pairs",
             description="Generates a partial primary structure with every n:th basepair replaced with a UG-pair.",
             default=True,
             )
 
-    add_promoters = BoolProperty(
+    add_promoters: BoolProperty(
             name="Add promoter sequence to the strand.",
             description="Adds promoter sequences to the beginning and the end of the RNA strand.",
-            default=True,
+            default=False,
             )
 
-    ug_proportion = FloatProperty(
+    ug_proportion: FloatProperty(
             name="UG proportion",
             description="The proportion of UG pairs per a domain.",
             default= 1/6,
             )
 
-    ug_min = IntProperty(
+    ug_min: IntProperty(
             name="Minimum number of UG pairs",
             description="The minimum number of UG pairs to generate per a domain.",
             default= 0,
             )
 
 
-    padding = EnumProperty(
+    padding: EnumProperty(
             name="Replace padding with",
             description="Replace unpaired bases between domains with ",
             items=(('NONE', "Nothing.", "Replace padding with nothing."),
@@ -109,8 +109,8 @@ def export(context, filepath, meta_data, add_promoters, ug_proportion, ug_min, p
     #import importlib
     #importlib.reload(sternaMain)
     positions, dotbracket, p_numbering = sternaMain.export_sterna_helix(context.object)
-    print("Positions: {}; ss: {}, pseudoknots: {}".format(len(positions.split(",")), len(dotbracket), len(p_numbering)))
-    print(dotbracket.count("("), dotbracket.count(")"))
+    #print("Positions: {}; ss: {}, pseudoknots: {}".format(len(positions.split(",")), len(dotbracket), len(p_numbering)))
+    #print(dotbracket.count("("), dotbracket.count(")"))
 
     partial_primary = get_partial_primary(dotbracket, ug_proportion, ug_min, padding)
     print(len(partial_primary))
@@ -131,6 +131,8 @@ def export(context, filepath, meta_data, add_promoters, ug_proportion, ug_min, p
                 partial_primary = partial_primary[:i-2] + "CCC" + partial_primary[i+1:]
                 break
 
+    print(dotbracket, partial_primary)
+    print(len(dotbracket), len(partial_primary), len(positions.split(",")))
     assert len(dotbracket) == len(partial_primary) == len(positions.split(","))
     #print("partial primary:", partial_primary)
 
@@ -229,7 +231,7 @@ def get_partial_primary(secondary_structure, ug_proportion, ug_min, padding):
                 s.extend(d)
             else:
                 p = int(len(d) / n)
-                print("{} -- prop: {}, len: {}, n: {}, p: {}".format("".join(d), ug_proportion, len(d), n, p))
+                #print("{} -- prop: {}, len: {}, n: {}, p: {}".format("".join(d), ug_proportion, len(d), n, p))
                 for i, sym in enumerate(d):
                     i += int(p/2)
                     if i % p == 0:
@@ -266,7 +268,7 @@ def split_to_domains(secondary_structure):
     stack = []
     p1 = "((..[[[[[[.))"
     p2 = "((..]]]]]].))"
-    ss = secondary_structure.replace(p1, "P1").replace(p2, "P2")
+    ss = secondary_structure.replace(p1, "X").replace(p2, "Y")
     #print(ss)
 
     for i, sym in enumerate(ss):
@@ -278,6 +280,7 @@ def split_to_domains(secondary_structure):
 
     domains = []
     for i, sym in enumerate(ss):
+        print(i, sum([len(d) for d in domains]))
         if sym == "(":
             if i == 0 or ss[i - 1] != "(":
                 domains.append([sym])
@@ -288,18 +291,21 @@ def split_to_domains(secondary_structure):
                 domains.append([sym])
             else:
                 domains[-1].append(sym)
-        else:
-            if len(domains) < 1 or domains[-1][0] in "()":
+        elif sym == ".":
+            if len(domains) < 1 or "." not in domains[-1]:
                 domains.append([sym])
             else:
                 domains[-1].append(sym)
+        elif sym in "XY":
+            domains.append(sym)
+            domains.append([])
     for i, d in enumerate(domains):
-        if "".join(d) == "P1":
+        if d == "X":
             domains[i] = p1
-        elif "".join(d) == "P2":
+        elif d == "Y":
             domains[i] = p2
-    for d in domains:
-        print("".join(d))
+
+    assert sum([len(d) for d in domains]) == len(secondary_structure)
     return domains
 
 

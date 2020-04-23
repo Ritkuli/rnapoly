@@ -1,0 +1,47 @@
+##############################
+####  PROGRAM PARAMETERS  ####
+##############################
+backend = CPU
+backend_precision = double
+#debug = 1
+#seed = 42
+
+##############################
+####    SIM PARAMETERS    ####
+##############################
+steps = 100000000
+newtonian_steps = 103
+diff_coeff = 2.50
+#pt = 0.99
+thermostat = john
+
+T = 37C
+dt = 0.003
+verlet_skin = 0.05
+
+##############################
+####     INTERACTIONS     ####
+##############################
+interaction_type = RNA2
+rcut = 2.0
+use_average_seq=0
+
+##############################
+####    INPUT / OUTPUT    ####
+##############################
+topology = .
+conf_file = .
+seq_dep_file = .
+lastconf_file = last.conf
+trajectory_file = trajectory.dat
+refresh_vel = 1
+#log_file = log.dat
+no_stdout_energy = 0
+restart_step_counter = 1
+energy_file = energy.dat
+print_conf_interval = 10000
+print_conf_ppc = 51
+print_energy_every = 10000
+time_scale = linear
+external_forces=0
+max_io=5
